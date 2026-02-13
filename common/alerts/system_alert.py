@@ -46,7 +46,7 @@ class SystemAlert:
         return parts[1] if len(parts) > 1 else ""
 
     def buttons(self) -> list[str]:
-        from .driver import driver
+        from ..driver import driver
 
         try:
             buttons = driver.web_driver.execute_script(
@@ -57,7 +57,7 @@ class SystemAlert:
             return []
 
     def tap(self, button_name: str) -> bool:
-        from .driver import driver
+        from ..driver import driver
 
         try:
             driver.web_driver.execute_script(

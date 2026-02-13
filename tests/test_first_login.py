@@ -39,6 +39,10 @@ class TestFirstLogin(TestBase):
                 ResultCode.ELEMENT_NOT_TAPPABLE,
                 "Login button not tappable",
             )
+            
+            logger.info("Tapped 'Login' button")
+            
+            Utils.delay(4)
 
             # find username text field
             username_text_field = ElementFinder.LoginPage.get_username_text_field()

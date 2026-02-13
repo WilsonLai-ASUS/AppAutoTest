@@ -138,6 +138,10 @@ class TestBase:
     def test_asus_privacy_policy_flow(self):
         """test EULA and Privacy Policy flow"""
 
+        # prevent last test case failure due to system permission alert by handling the alert first, if exists
+        if app.is_ios():
+            self.test_system_permission_alert()
+            
         self.test_asus_eula()
         self.test_asus_privacy_policy()
 
