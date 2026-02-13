@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test Reports
+reports/
+*.log
+
+# Screenshots
+# *.png
+# *.jpg
+# *.jpeg
+
+# Config (如果包含敏感資訊)
+# config/*.json
+
+# Appium
+.appium/
+
+# iOS
+*.ipa
+
+# Android
+*.apk
+
