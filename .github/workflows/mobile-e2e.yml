@@ -1,6 +1,19 @@
 name: mobile-e2e
 
 on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - .github/workflows/**
+      - common/**
+      - tests/**
+      - config/**
+      - requirements.txt
   workflow_dispatch:
     inputs:
       test_target:
@@ -18,6 +31,7 @@ jobs:
     # with real iOS + Android devices attached and Appium installed.
     runs-on: [self-hosted, macOS]
 
+
     strategy:
       fail-fast: false
       max-parallel: 1 # one runner + real devices: avoid parallel contention
@@ -32,15 +46,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      - name: Show Python version (system)
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v python3
+          python3 --version
+
+      - name: Create venv
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv
+          echo "${PWD}/.venv/bin" >> "${GITHUB_PATH}"
+          .venv/bin/python --version
+          .venv/bin/python -m pip --version
 
       - name: Install Python dependencies
+        shell: bash
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements.txt
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
       - name: Ensure Appium is running (best-effort)
         shell: bash
@@ -68,6 +95,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          # On pull_request triggers there are no workflow_dispatch inputs.
+          TEST_TARGET="${TEST_TARGET:-tests.test_qis_asus_router}"
+          DUT_CONFIG="${DUT_CONFIG:-}"
+
           DUT_ARGS=""
           if [[ -n "${DUT_CONFIG}" ]]; then
             DUT_ARGS="-dut ${DUT_CONFIG}"
@@ -76,9 +107,9 @@ jobs:
           echo "Running: ${TEST_TARGET} with ${APP_CONFIG} ${DUT_ARGS}"
 
           if [[ "${TEST_TARGET}" == *.py ]]; then
-            python3 "${TEST_TARGET}" -app "${APP_CONFIG}" ${DUT_ARGS}
+            python "${TEST_TARGET}" -app "${APP_CONFIG}" ${DUT_ARGS}
           else
-            python3 -m "${TEST_TARGET}" -app "${APP_CONFIG}" ${DUT_ARGS}
+            python -m "${TEST_TARGET}" -app "${APP_CONFIG}" ${DUT_ARGS}
           fi
 
       - name: Upload results
