@@ -1,7 +1,7 @@
 {
     "appium_server": "http://127.0.0.1:4723",
     "log_level": "DEBUG",
-    "record_dir": "reports",
+    "results_dir": "results",
     "platform_name": "iOS",
     "device_name": "iPhone",
     "udid": "00008120-000125DE145BC01E",
