@@ -19,6 +19,7 @@ class ResultCode(Enum):
     ELEMENT_NOT_FOUND = 10
     ELEMENT_NOT_TAPPABLE = 11
     ELEMENT_NOT_TYPABLE = 13
+    ELEMENT_NOT_INTERACTABLE = 14
 
 
 class Result(Exception):

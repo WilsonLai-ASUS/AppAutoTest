@@ -6,7 +6,7 @@
 
 import sys
 from tests.test_base import TestBase
-from common import Result, ResultCode
+from common import Result
 
 
 class TestLaunch(TestBase):
@@ -19,6 +19,10 @@ class TestLaunch(TestBase):
         return self.run_test(steps)
 
 
-if __name__ == "__main__":
-    test = TestLaunch(sys.argv)
+def main(argv=None):
+    test = TestLaunch(argv or sys.argv)
     test.finish(test.test())
+
+
+if __name__ == "__main__":
+    main()

@@ -9,13 +9,13 @@ from importlib.resources import path
 
 
 class Utils:
-    
+
     @staticmethod
-    def delay(seconds=1):
+    def delay(seconds:float=1.0):
         import time
 
         time.sleep(seconds)
-        
+
     @staticmethod
     def get_absolute_path(path):
         import os

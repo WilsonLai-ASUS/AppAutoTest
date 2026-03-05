@@ -8,13 +8,15 @@ import sys
 import os
 import inspect
 import argparse
+from dataclasses import dataclass
+from datetime import datetime
 
 from common import (
     app,
     logger,
     driver,
     dut,
-    screenshot,
+    record,
     Utils,
     Element,
     ElementAlert,
@@ -23,6 +25,13 @@ from common import (
     Result,
     ResultCode,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class RunOptions:
+    do_setup: bool = True
+    do_teardown: bool = True
+    run_privacy_flow: bool = True
 
 
 class TestBase:
@@ -39,7 +48,8 @@ class TestBase:
         parser.add_argument(
             "-dut", "--dut-config", default=None, help="DUT config file path"
         )
-        args = parser.parse_args()
+        argvs = argvs or sys.argv
+        args = parser.parse_args(argvs[1:])
 
         app_config_path = args.app_config
         dut_config_path = args.dut_config
@@ -57,20 +67,40 @@ class TestBase:
         logger.info("Setting up test...")
 
         try:
-            # logger
-            logger.set_path(app.log_path)
-            logger.set_level(app.log_level)
+            # Create per-run results directory structure:
+            base_results_dir = app.results_dir()
+            if not base_results_dir:
+                base_results_dir = Utils.get_absolute_path("results")
 
-            # screenshot
-            screenshot.set_dir(app.screenshot_dir)
+            run_ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            run_dir = os.path.join(base_results_dir, run_ts)
+            logs_dir = os.path.join(run_dir, "logs")
+            screenshots_dir = os.path.join(run_dir, "screenshots")
+            videos_dir = os.path.join(run_dir, "videos")
+            reports_dir = os.path.join(run_dir, "reports")
+
+            os.makedirs(logs_dir, exist_ok=True)
+            os.makedirs(screenshots_dir, exist_ok=True)
+            os.makedirs(videos_dir, exist_ok=True)
+            os.makedirs(reports_dir, exist_ok=True)
+
+            # logger
+            logger.set_path(os.path.join(logs_dir, "test.log"))
+            logger.set_level(app.log_level())
+
+            # record
+            record.set_dirs(screenshots_dir=screenshots_dir, videos_dir=videos_dir)
 
             # driver
             driver.set_web_driver(app)
 
-            if not driver.is_exist:
+            if not driver.is_exist():
                 raise RuntimeError("Failed to initialize driver")
 
             logger.info("Driver initialized successfully")
+
+            # start recording
+            record.start_recording()
 
             # delay to ensure app is stable
             Utils.delay()
@@ -80,31 +110,61 @@ class TestBase:
 
     def teardown(self):
         """teardown"""
-        if driver.is_exist():
-            logger.info("Tearing down test...")
-            driver.quit()
-            logger.info("Driver closed")
+        logger.info("Tearing down test...")
 
-    def run_test(self, test_func) -> Result:
-        """run test_func with setup and teardown, and handle exceptions"""
+        # stop recording
+        record.stop_recording()
+
+        if app.app_terminate:
+            if driver.is_exist():
+                logger.info("Terminating app...")
+                driver.quit()
+                logger.info("App terminated")
+            else:
+                logger.warn("Driver does not exist during teardown, skipping quit()")
+        else:
+            logger.info(
+                "App termination disabled, skipping driver.quit() in teardown()"
+            )
+
+    def run_test(
+        self,
+        test_func,
+        *,
+        options: RunOptions | None = None,
+    ) -> Result:
+        """run test_func and handle exceptions.
+
+        By default, this method manages the full lifecycle (setup -> optional flows -> test -> teardown).
+        For suite-style execution, you can disable setup/teardown to reuse the same driver/session.
+        """
+        options = options or RunOptions()
+
+        if not options.do_setup and not driver.is_exist():
+            return Result(
+                ResultCode.FAILURE,
+                "Driver is not initialized. Run the first test with do_setup=True, or call setup() once before suite execution.",
+            )
         try:
-            self.setup()
+            if options.do_setup:
+                self.setup()
 
-            # test privacy policy flow before running
-            self.test_asus_privacy_policy_flow()
+            if options.run_privacy_flow:
+                self.test_asus_privacy_policy_flow()
 
             test_func()
             return Result(ResultCode.SUCCESS, "Test passed")
         except Result as r:
             logger.error("Test failed with error: %s", r.description())
-            screenshot.take(f"{test_func.__name__}_FAILURE")
+            record.screenshot(f"{test_func.__name__}_FAILURE")
             return r
         except Exception as e:
             logger.error("Test failed with exception: %s", str(e))
-            screenshot.take(f"{test_func.__name__}_FAILURE")
+            record.screenshot(f"{test_func.__name__}_FAILURE")
             return Result(ResultCode.FAILURE, str(e))
         finally:
-            self.teardown()
+            if options.do_teardown:
+                self.teardown()
 
     def test(self):
         """test entry point, to be overridden by subclasses"""
@@ -127,7 +187,7 @@ class TestBase:
         if result.code == ResultCode.SUCCESS:
             logger.passed(test_name)
         else:
-            logger.failed(f"{test_name}: {result.description}")
+            logger.fail(f"{test_name}: {result.description()}")
 
         exit(result.code.value)
 
@@ -140,14 +200,14 @@ class TestBase:
 
         # prevent last test case failure due to system permission alert by handling the alert first, if exists
         if app.is_ios():
-            self.test_system_permission_alert()
-            
+            self.test_ios_system_permission_alert()
+
         self.test_asus_eula()
         self.test_asus_privacy_policy()
 
         if app.is_ios():
             Utils.delay(2)
-            self.test_system_permission_alert()
+            self.test_ios_system_permission_alert()
 
         Utils.delay(4)
 
@@ -157,8 +217,7 @@ class TestBase:
         # find title bar
         title_bar = ElementFinder.AsusEulaPage.get_title_bar()
 
-        # not on eula page, skip the test and return success
-        if not title_bar.is_exist():
+        if title_bar.is_exist("End User License Agreement") == False:
             logger.info("Not on EULA page, skipping EULA test")
             return
 
@@ -171,14 +230,17 @@ class TestBase:
             "EULA scroll view not found",
         )
 
-        # swipe 2 times to scroll to the bottom
-        for _ in range(2):
-            self.swipe_up(element=asus_eula_scroll_view, duration=50)
+        # swipe 1 time to scroll to the bottom
+        self.swipe_up(element=asus_eula_scroll_view, duration=0.02)
 
         is_above_16_button_tapped = False
 
         # try to find and tap the "Above 16 years" button, if not found, swipe up and try again, repeat for 3 times
-        for _ in range(3):
+        retry_count = 3
+        if app.is_android():
+            retry_count += 7
+
+        for i in range(retry_count):
             above_16_button = ElementFinder.AsusEulaPage.get_above_16_button()
             if above_16_button.is_exist():
                 self.check(
@@ -191,12 +253,13 @@ class TestBase:
                 is_above_16_button_tapped = True
                 break
             else:
+                # print retry count
                 logger.debug(
-                    "Above 16 years button not found, swiping up to find the button..."
+                    f"Above 16 years button not found, swiping up to find the button... (attempt {i+1}/{retry_count})"
                 )
 
             # try to swipe up to find the agree button or other elements
-            self.swipe_up(element=asus_eula_scroll_view, duration=50)
+            self.swipe_up(element=asus_eula_scroll_view, duration=0.02)
 
         self.check(
             is_above_16_button_tapped,
@@ -233,9 +296,17 @@ class TestBase:
         title_bar = ElementFinder.AsusPrivacyPolicyPage.get_title_bar()
 
         # not on privacy policy page, skip the test and return success
-        if not title_bar.is_exist():
-            logger.info("Not on Privacy Policy page, skipping Privacy Policy test")
-            return
+        if app.is_ios():
+            if title_bar.is_exist("Privacy Policy") == False:
+                logger.info("Not on Privacy Policy page, skipping Privacy Policy test")
+                return
+        else:
+            if (
+                title_bar.is_exist("ASUS Privacy Notice / ASUS EU Data Act Notice")
+                == False
+            ):
+                logger.info("Not on Privacy Policy page, skipping Privacy Policy test")
+                return
 
         # find asus pp scroll view
         asus_pp_scroll_view = ElementFinder.AsusPrivacyPolicyPage.get_scroll_view()
@@ -247,7 +318,7 @@ class TestBase:
         )
 
         # swipe 1 time
-        self.swipe_up(element=asus_pp_scroll_view, duration=50)
+        self.swipe_up(element=asus_pp_scroll_view, duration=0.02)
 
         # find agree button
         agree_button = ElementFinder.AsusPrivacyPolicyPage.get_agree_button()
@@ -276,7 +347,7 @@ class TestBase:
     # Alert
     # ==========================================================================
 
-    def test_system_permission_alert(self):
+    def test_ios_system_permission_alert(self):
         while True:
             alert = SystemAlert()
 
@@ -322,146 +393,112 @@ class TestBase:
                 logger.info("No upgrade alert detected")
                 return
 
-    def test_upgrade_alert2(self):
-        while True:
-            # alert = ElementAlert(ios_predicate_string='name == "Notice" AND label == "Notice" AND type == "XCUIElementTypeAlert"')
-            alert = ElementAlert()
-
-            if alert.is_exist():
-                logger.info(
-                    f"Alert title: {alert.title()}, body: {alert.body()}, buttons: {alert.buttons()}"
-                )
-
-                if alert.tap("Update"):
-                    logger.info("Tapped 'Update' on upgrade alert")
-                else:
-                    logger.error("Upgrade alert detected but 'Update' button not found")
-                    break
-
-                Utils.delay()
-            else:
-                logger.info("No upgrade alert detected")
-                return
-
     # ==========================================================================
     # Swipe
     # ==========================================================================
 
-    def swipe(self, x1, y1, x2, y2, duration=500):
-        logger.debug(
-            f"Swiping from ({x1}, {y1}) to ({x2}, {y2}) with duration {duration}ms"
-        )
-        try:
-            driver.swipe(x1, y1, x2, y2, duration)
-            Utils.delay(0.5)
-        except Exception as e:
-            logger.error(f"Error during swipe: {e}")
-
     def swipe_up(
         self,
         *,
-        element=None,
-        progress={"begin": 0.0, "end": 1.0},
-        duration=500,
+        element: Element | None = None,
+        progress={"begin": 0.2, "end": 1.0},
+        duration=0.5,
+        delay_after=1.0,
     ):
         """向上滑動"""
-        x1 = 0
-        x2 = 0
-        y1 = 0
-        y2 = 0
-        begin_progress = progress.get("begin", 0.0)
-        end_progress = progress.get("end", 1.0)
-
         if element is not None and element.is_exist():
-            x1 = element.x() + element.center_x()
-            y1 = element.y() + int(element.height() * (1 - begin_progress)) - 1
-            x2 = x1
-            y2 = element.y() + int(element.height() * (1 - end_progress))
+            rect = element.rect()
+            rect["height"] -= 1
+            driver.swipe_up(
+                rect=rect,
+                progress=progress,
+                duration=duration,
+                delay_after=delay_after,
+            )
         else:
-            x1 = driver.window_center_x()
-            y1 = int(driver.window_height() * (1 - begin_progress))
-            x2 = x1
-            y2 = int(driver.window_height() * (1 - end_progress))
-
-        self.swipe(x1, y1, x2, y2, duration)
+            driver.swipe_up(
+                progress=progress, duration=duration, delay_after=delay_after
+            )
 
     def swipe_down(
         self,
         *,
-        element=None,
-        progress={"begin": 0.0, "end": 1.0},
-        duration=500,
+        element: Element | None = None,
+        progress={"begin": 0.2, "end": 1.0},
+        duration=0.5,
+        delay_after=1.0,
     ):
         """向下滑動"""
-        x1 = 0
-        x2 = 0
-        y1 = 0
-        y2 = 0
-        begin_progress = progress.get("begin", 0.0)
-        end_progress = progress.get("end", 1.0)
-
         if element is not None and element.is_exist():
-            x1 = element.x() + element.center_x()
-            y1 = element.y() + int(element.height() * begin_progress) + 1
-            x2 = x1
-            y2 = element.y() + int(element.height() * end_progress)
+            rect = element.rect()
+            rect["y"] += 1
+            rect["height"] -= 1
+            driver.swipe_down(
+                rect=rect,
+                progress=progress,
+                duration=duration,
+                delay_after=delay_after,
+            )
         else:
-            x1 = driver.window_center_x()
-            y1 = int(driver.window_height() * begin_progress)
-            x2 = x1
-            y2 = int(driver.window_height() * end_progress)
-
-        self.swipe(x1, y1, x2, y2, duration)
+            driver.swipe_down(
+                progress=progress, duration=duration, delay_after=delay_after
+            )
 
     def swipe_left(
-        self, *, element=None, progress={"begin": 0.0, "end": 1.0}, duration=500
+        self,
+        *,
+        element: Element | None = None,
+        progress={"begin": 0.2, "end": 1.0},
+        duration=0.5,
+        delay_after=1.0,
     ):
         """向左滑動"""
-        x1 = 0
-        x2 = 0
-        y1 = 0
-        y2 = 0
-        begin_progress = progress.get("begin", 0.0)
-        end_progress = progress.get("end", 1.0)
-
         if element is not None and element.is_exist():
-            x1 = element.x() + int(element.width() * (1 - begin_progress)) - 1
-            y1 = element.y() + element.center_y()
-            x2 = element.x() + int(element.width() * (1 - end_progress))
-            y2 = y1
+            rect = element.rect()
+            rect["width"] -= 1
+            driver.swipe_left(
+                rect=rect,
+                progress=progress,
+                duration=duration,
+                delay_after=delay_after,
+            )
         else:
-            x1 = int(driver.window_width() * (1 - begin_progress))
-            y1 = driver.window_center_y()
-            x2 = int(driver.window_width() * (1 - end_progress))
-            y2 = y1
-
-        self.swipe(x1, y1, x2, y2, duration)
+            driver.swipe_left(
+                progress=progress, duration=duration, delay_after=delay_after
+            )
 
     def swipe_right(
-        self, *, element=None, progress={"begin": 0.0, "end": 1.0}, duration=500
+        self,
+        *,
+        element: Element | None = None,
+        progress={"begin": 0.2, "end": 1.0},
+        duration=0.5,
+        delay_after=1.0,
     ):
         """向右滑動"""
-        x1 = 0
-        x2 = 0
-        y1 = 0
-        y2 = 0
-        begin_progress = progress.get("begin", 0.0)
-        end_progress = progress.get("end", 1.0)
-
         if element is not None and element.is_exist():
-            x1 = element.x() + int(element.width() * begin_progress) + 1
-            y1 = element.y() + element.center_y()
-            x2 = element.x() + int(element.width() * end_progress)
-            y2 = y1
+            rect = element.rect()
+            rect["x"] += 1
+            rect["width"] -= 1
+            driver.swipe_right(
+                rect=rect,
+                progress=progress,
+                duration=duration,
+                delay_after=delay_after,
+            )
         else:
-            x1 = int(driver.window_width() * begin_progress)
-            y1 = driver.window_center_y()
-            x2 = int(driver.window_width() * end_progress)
-            y2 = y1
+            driver.swipe_right(
+                progress=progress, duration=duration, delay_after=delay_after
+            )
 
-        self.swipe(x1, y1, x2, y2, duration)
+    def connect_wifi(self, ssid, password=None):
+        driver.connect_wifi(ssid, password)
+
+
+def main(argv=None):
+    test = TestBase(argv or sys.argv)
+    test.finish(test.test())
 
 
 if __name__ == "__main__":
-    test = TestBase(sys.argv)
-    test.finish(test.test())
+    main()

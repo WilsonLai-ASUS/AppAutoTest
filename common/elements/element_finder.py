@@ -90,43 +90,5 @@ class ElementFinder:
                 android_xpath='//android.widget.Button[@resource-id="com.asus.aihome:id/agree"]',
             )
 
-    class FirstLoginPage:
-        @staticmethod
-        def get_login_button() -> Element:
-            return Element(
-                ios_class_chain="**/XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeTable/XCUIElementTypeCell[2]",
-                ios_xpath="//XCUIElementTypeTable/XCUIElementTypeCell[2]",
-                android_id="com.asus.aihome:id/sign_zone",
-                android_xpath='//android.widget.LinearLayout[@resource-id="com.asus.aihome:id/sign_zone"]',
-            )
 
-    class LoginPage:
-        @staticmethod
-        def get_username_text_field() -> Element:
-            return Element(
-                ios_class_chain='**/XCUIElementTypeTextField[`value == "Username"`]',
-                ios_predicate_string='value == "Username"',
-                ios_xpath='//XCUIElementTypeTextField[@value="Username"]',
-                android_id="com.asus.aihome:id/username_input_field",
-                android_xpath='//android.widget.EditText[@resource-id="com.asus.aihome:id/username_input_field"]',
-            )
-
-        @staticmethod
-        def get_password_text_field() -> Element:
-            return Element(
-                ios_class_chain="XCUIElementTypeSecureTextField",
-                ios_predicate_string='value == "Password"',
-                ios_xpath='//XCUIElementTypeSecureTextField[@value="Password"]',
-                android_id="com.asus.aihome:id/key_input_field",
-                android_xpath='//android.widget.EditText[@resource-id="com.asus.aihome:id/key_input_field"]',
-            )
-
-        @staticmethod
-        def get_login_button() -> Element:
-            return Element(
-                ios_class_chain='**/XCUIElementTypeButton[`name == "Sign in"`]',
-                ios_predicate_string='name == "Sign in" AND label == "Sign in" AND type == "XCUIElementTypeButton"',
-                ios_xpath='//XCUIElementTypeButton[@name="Sign in"]',
-                android_id="com.asus.aihome:id/action_btn",
-                android_xpath='//android.widget.Button[@resource-id="com.asus.aihome:id/action_btn"]',
-            )
+    

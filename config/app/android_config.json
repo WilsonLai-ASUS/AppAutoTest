@@ -1,7 +1,7 @@
 {
     "appium_server": "http://127.0.0.1:4723",
     "log_level": "DEBUG",
-    "screenshot_dir": "reports",
+    "results_dir": "results",
     "platform_name": "Android",
     "device_name": "Android Device",
     "udid": "ce031713353b7ce60c",

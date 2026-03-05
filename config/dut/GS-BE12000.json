@@ -1,0 +1,13 @@
+{
+    "ip": "192.168.50.1",
+    "model_name": "GS-BE12000",
+    "default_local_username": "admin",
+    "default_local_password": "kfi5a6r39#",
+    "default_wifi_ssid": "ASUS_30",
+    "default_wifi_password": "&f3w5hmiip",
+    "local_username": "admin",
+    "local_password": "asus#12345",
+    "wifi_ssid": "#AppAutoTest_GS-BE12000",
+    "wifi_password": "asus#12345",
+    "is_support_default_password": true
+}

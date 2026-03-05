@@ -12,10 +12,11 @@ from .elements.element_finder import ElementFinder
 from .app import app
 from .driver import driver
 from .dut import dut
+from .httpd_api import httpd_api
 from .logger import logger
 from .utils import Utils
 from .result import Result, ResultCode
-from .screenshot import screenshot
+from .record import record
 
 __all__ = [
     # alerts
@@ -27,9 +28,10 @@ __all__ = [
     "app",
     "driver",
     "dut",
+    "httpd_api",
     "logger",
     "Utils",
     "Result",
     "ResultCode",
-    "screenshot",
+    "record",
 ]

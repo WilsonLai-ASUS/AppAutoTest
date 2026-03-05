@@ -4,23 +4,23 @@
 Logger utility for logging messages during tests.
 """
 
-from datetime import datetime
-from email.mime import message
-from enum import Enum
 import inspect
+import os
+from datetime import datetime
+from enum import Enum
 
 
 class LogLevel(Enum):
-    FAILED = (0, "FAILED")
-    PASSED = (1, "PASSED")
+    FAIL = (0, "FAIL")
+    PASS = (1, "PASS")
     ERROR = (2, "ERROR")
-    WARNING = (3, "WARNING")
+    WARN = (3, "WARN")
     INFO = (4, "INFO")
     DEBUG = (5, "DEBUG")
 
 
 class Colors:
-    """ANSI 颜色代码"""
+    """ANSI Color codes for terminal output"""
 
     GREEN = "\033[92m"
     RED = "\033[91m"
@@ -55,8 +55,35 @@ class Logger:
                     self.level = log_level
                     break
 
-    def timestamp(self):
-        return datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    def _timestamp(self):
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def _caller_filename(self) -> str:
+        try:
+            frame = inspect.currentframe()
+            # self._caller_filename -> log -> (info/debug/...) -> caller
+            while frame is not None:
+                frame = frame.f_back
+                if frame is None:
+                    break
+
+                filename = frame.f_code.co_filename or ""
+                if filename.endswith(os.path.join("common", "logger.py")):
+                    continue
+                base = os.path.basename(filename)
+                return base
+        except Exception:
+            return ""
+        return ""
+
+    def _format(self, caller: str, width: int = 32) -> str:
+        caller = caller or ""
+        if width <= 0:
+            return ""
+
+        # If longer than width, keep the tail (drop the head)
+        caller_fixed = caller[-width:]
+        return caller_fixed.ljust(width)
 
     def log(self, level, message, *args):
         if level.value[0] > self.level.value[0]:
@@ -64,16 +91,16 @@ class Logger:
         if args:
             message = message % args
 
-        # log_message = f"{self.timestamp()} [{level.value[1]}] {message}"
+        timestamp = self._timestamp()
+        level_format = self._format(level.value[1], width=5)
+        caller_format = self._format(self._caller_filename(), width=16)
 
-        log_message = ""
-
-        if level == LogLevel.PASSED:
-            log_message = f"{self.timestamp()} [{Colors.GREEN}{Colors.BOLD}{level.value[1]}{Colors.RESET}] {message}"
-        elif level == LogLevel.FAILED:
-            log_message = f"{self.timestamp()} [{Colors.RED}{Colors.BOLD}{level.value[1]}{Colors.RESET}] {message}"
+        if level == LogLevel.PASS:
+            log_message = f"[{timestamp}] [{Colors.GREEN}{Colors.BOLD}{level_format}{Colors.RESET}] [{caller_format}] {message}"
+        elif level == LogLevel.FAIL:
+            log_message = f"[{timestamp}] [{Colors.RED}{Colors.BOLD}{level_format}{Colors.RESET}] [{caller_format}] {message}"
         else:
-            log_message = f"{self.timestamp()} [{level.value[1]}] {message}"
+            log_message = f"[{timestamp}] [{level_format}] [{caller_format}] {message}"
 
         print(log_message)
         if self.path:
@@ -83,14 +110,14 @@ class Logger:
     def error(self, message, *args):
         self.log(LogLevel.ERROR, message, *args)
 
-    def warning(self, message, *args):
-        self.log(LogLevel.WARNING, message, *args)
+    def warn(self, message, *args):
+        self.log(LogLevel.WARN, message, *args)
 
     def passed(self, message, *args):
-        self.log(LogLevel.PASSED, message, *args)
+        self.log(LogLevel.PASS, message, *args)
 
-    def failed(self, message, *args):
-        self.log(LogLevel.FAILED, message, *args)
+    def fail(self, message, *args):
+        self.log(LogLevel.FAIL, message, *args)
 
     def info(self, message, *args):
         self.log(LogLevel.INFO, message, *args)

@@ -1,0 +1,92 @@
+name: mobile-e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_target:
+        description: "Test module (e.g. tests.test_qis_asus_router) or file path (e.g. tests/test_qis_asus_router.py)"
+        required: true
+        default: "tests.test_qis_asus_router"
+      dut_config:
+        description: "Optional DUT config path (e.g. config/dut/GS-BE12000.json)"
+        required: false
+        default: ""
+
+jobs:
+  e2e:
+    # iOS requires a macOS runner. Use a self-hosted macOS runner in your lab
+    # with real iOS + Android devices attached and Appium installed.
+    runs-on: [self-hosted, macOS]
+
+    strategy:
+      fail-fast: false
+      max-parallel: 1 # one runner + real devices: avoid parallel contention
+      matrix:
+        include:
+          - platform: ios
+            app_config: config/app/ios_config.json
+          - platform: android
+            app_config: config/app/android_config.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt
+
+      - name: Ensure Appium is running (best-effort)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if lsof -nP -iTCP:4723 -sTCP:LISTEN >/dev/null 2>&1; then
+            echo "Appium already listening on :4723"
+            exit 0
+          fi
+
+          if command -v appium >/dev/null 2>&1; then
+            echo "Starting Appium server on :4723"
+            nohup appium --port 4723 --base-path / --log-no-colors --log-timestamp > appium.log 2>&1 &
+            sleep 2
+          else
+            echo "appium command not found; assuming Appium is managed outside the workflow"
+          fi
+
+      - name: Run test (${{ matrix.platform }})
+        shell: bash
+        env:
+          APP_CONFIG: ${{ matrix.app_config }}
+          TEST_TARGET: ${{ inputs.test_target }}
+          DUT_CONFIG: ${{ inputs.dut_config }}
+        run: |
+          set -euo pipefail
+
+          DUT_ARGS=""
+          if [[ -n "${DUT_CONFIG}" ]]; then
+            DUT_ARGS="-dut ${DUT_CONFIG}"
+          fi
+
+          echo "Running: ${TEST_TARGET} with ${APP_CONFIG} ${DUT_ARGS}"
+
+          if [[ "${TEST_TARGET}" == *.py ]]; then
+            python3 "${TEST_TARGET}" -app "${APP_CONFIG}" ${DUT_ARGS}
+          else
+            python3 -m "${TEST_TARGET}" -app "${APP_CONFIG}" ${DUT_ARGS}
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.platform }}-${{ github.run_id }}
+          path: |
+            results/**
+            appium.log
+          if-no-files-found: warn

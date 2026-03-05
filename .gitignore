@@ -27,7 +27,7 @@ ENV/
 Thumbs.db
 
 # Test Reports
-reports/
+results/
 *.log
 
 # Screenshots

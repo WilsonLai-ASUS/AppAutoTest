@@ -1,64 +1,11 @@
 # element.py
 
-from appium.webdriver.common.appiumby import AppiumBy
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.remote.webelement import WebElement
+from appium.webdriver.common.appiumby import AppiumBy
 
 from ..utils import Utils
 from ..app import app
-
-
-def get_elements_by_ios_predicate_string(driver, predicate_string, timeout=1):
-    try:
-        return driver.web_driver.find_elements(AppiumBy.IOS_PREDICATE, predicate_string)
-    except:
-        return []  # 找不到元素就回傳空 list
-
-
-def get_element_by_ios_predicate_string(driver, predicate_string, timeout=1):
-    elements = get_elements_by_ios_predicate_string(driver, predicate_string, timeout)
-    return elements[-1] if elements else None
-
-
-def get_elements_by_ios_class_chain(driver, class_chain, timeout=1):
-    try:
-        return driver.web_driver.find_elements(AppiumBy.IOS_CLASS_CHAIN, class_chain)
-    except:
-        return []  # 找不到元素就回傳空 list
-
-
-def get_element_by_ios_class_chain(driver, class_chain, timeout=1):
-    elements = get_elements_by_ios_class_chain(driver, class_chain, timeout)
-    return elements[-1] if elements else None
-
-
-def get_elements_by_android_id(driver, android_id, timeout=1):
-    try:
-        return driver.web_driver.find_elements(AppiumBy.ID, android_id)
-    except:
-        return []  # 找不到元素就回傳空 list
-
-
-def get_element_by_android_id(driver, android_id, timeout=1):
-    elements = get_elements_by_android_id(driver, id, timeout)
-    return elements[-1] if elements else None
-
-
-def get_elements_by_xpath(driver, xpath, timeout=1):
-    wait = WebDriverWait(driver.web_driver, timeout)
-    try:
-        elements = wait.until(
-            EC.presence_of_all_elements_located((AppiumBy.XPATH, xpath))
-        )
-        return elements  # list，可能有多個元素
-    except:
-        return []  # 找不到元素就回傳空 list
-
-
-def get_element_by_xpath(driver, xpath, timeout=1):
-    elements = get_elements_by_xpath(driver, xpath, timeout)
-    return elements[-1] if elements else None  # 回傳最後一個元素，如果找不到就回傳 None
+from ..logger import logger
 
 
 class Element:
@@ -71,9 +18,31 @@ class Element:
         ios_class_chain=None,
         ios_predicate_string=None,
         ios_xpath=None,
+        ios_button_name=None,
+        ios_static_text_name=None,
+        ios_text_field_name=None,
+        ios_name=None,
         android_id=None,
         android_xpath=None,
     ):
+        """
+        ios priority:
+        1. web_element
+        2. ios_class_chain
+        3. ios_predicate_string
+        4. ios_xpath
+        5. ios_button_name
+        6. ios_name
+        7. ios_static_text_name
+        8. ios_text_field_name
+        9. ios_name
+
+        android priority:
+        1. web_element
+        2. android_id
+        3. android_xpath
+        """
+
         from ..driver import driver
 
         self.web_element = None
@@ -83,25 +52,76 @@ class Element:
             return
 
         if app.is_ios():
+            # ios_class_chain
             if self.web_element is None and ios_class_chain is not None:
-                self.web_element = get_element_by_ios_class_chain(
-                    driver, ios_class_chain
+                self.web_element = driver.get_element_by_ios_class_chain(
+                    ios_class_chain
                 )
 
+            # ios_predicate_string
             if self.web_element is None and ios_predicate_string is not None:
-                self.web_element = get_element_by_ios_predicate_string(
-                    driver, ios_predicate_string
+                self.web_element = driver.get_element_by_ios_predicate_string(
+                    ios_predicate_string
                 )
 
+            # ios_xpath
             if self.web_element is None and ios_xpath is not None:
-                self.web_element = get_element_by_xpath(driver, ios_xpath)
+                self.web_element = driver.get_element_by_xpath(ios_xpath)
+
+            # ios_button_name
+            if self.web_element is None and ios_button_name is not None:
+                self.web_element = driver.get_element_by_ios_class_chain(
+                    f'**/XCUIElementTypeButton[`name == "{ios_button_name}"`]'
+                )
+                if self.web_element is None:
+                    self.web_element = driver.get_element_by_xpath(
+                        f'//XCUIElementTypeButton[@name="{ios_button_name}"]'
+                    )
+
+            # ios_static_text_name
+            if self.web_element is None and ios_static_text_name is not None:
+                self.web_element = driver.get_element_by_ios_class_chain(
+                    f'**/XCUIElementTypeStaticText[`name == "{ios_static_text_name}"`]'
+                )
+                if self.web_element is None:
+                    self.web_element = driver.get_element_by_xpath(
+                        f'//XCUIElementTypeStaticText[@name="{ios_static_text_name}"]'
+                    )
+
+            # ios_text_field_name
+            if self.web_element is None and ios_text_field_name is not None:
+                self.web_element = driver.get_element_by_ios_class_chain(
+                    f'**/XCUIElementTypeTextField[`name == "{ios_text_field_name}"`]'
+                )
+                if self.web_element is None:
+                    self.web_element = driver.get_element_by_xpath(
+                        f'//XCUIElementTypeTextField[@name="{ios_text_field_name}"]'
+                    )
+
+            # ios_name
+            if self.web_element is None and ios_name is not None:
+                self.web_element = driver.get_element_by_ios_class_chain(
+                    f'**/XCUIElementTypeButton[`name == "{ios_name}"`]'
+                )
+                if self.web_element is None:
+                    self.web_element = driver.get_element_by_xpath(
+                        f'//XCUIElementTypeButton[@name="{ios_name}"]'
+                    )
+                    if self.web_element is None:
+                        self.web_element = driver.get_element_by_ios_class_chain(
+                            f'**/XCUIElementTypeStaticText[`name == "{ios_name}"`]'
+                        )
+                        if self.web_element is None:
+                            self.web_element = driver.get_element_by_xpath(
+                                f'//XCUIElementTypeStaticText[@name="{ios_name}"]'
+                            )
 
         elif app.is_android():
             if self.web_element is None and android_id is not None:
-                self.web_element = get_element_by_android_id(driver, android_id)
+                self.web_element = driver.get_element_by_android_id(android_id)
 
             if self.web_element is None and android_xpath is not None:
-                self.web_element = get_element_by_xpath(driver, android_xpath)
+                self.web_element = driver.get_element_by_xpath(android_xpath)
 
     # get attributes
     def get_attribute_str(self, attribute_name: str) -> str:
@@ -124,8 +144,87 @@ class Element:
         attribute_value = self.get_attribute_str(attribute_name)
         return attribute_value.lower() == "true"
 
-    def rect(self, rect_name: str) -> int:
-        return self.web_element.rect.get(rect_name, 0) if self.is_exist() else 0
+    def get_parent_element(self) -> "Element":
+        if not self.is_exist():
+            return Element()
+
+        try:
+            if app.is_ios():
+                xpath_candidates = [
+                    "..",
+                    "./..",
+                    "parent::*",
+                    "./parent::*",
+                    "ancestor::*[1]",
+                ]
+                last_error: Exception | None = None
+
+                for parent_xpath in xpath_candidates:
+                    try:
+                        parent_web_element = self.web_element.find_element(
+                            AppiumBy.XPATH, parent_xpath
+                        )
+                        parent_element = Element(web_element=parent_web_element)
+                        return parent_element
+                    except Exception as e:
+                        last_error = e
+
+                # Fallback : locate from root then select parent in a single XPath.
+                # (More reliable on XCUITest than element->element '..')
+                try:
+                    from ..driver import driver
+
+                    current = self.debug_attributes()
+                    target_tag = current.get("type", "")
+                    target_name = current.get("text", "")
+                    target_x = current.get("x", None)
+                    target_y = current.get("y", None)
+                    target_w = current.get("width", None)
+                    target_h = current.get("height", None)
+
+                    def _xpath_literal(value: str) -> str:
+                        if "'" not in value:
+                            return f"'{value}'"
+                        if '"' not in value:
+                            return f'"{value}"'
+                        # Rare: contains both quotes. Minimal safe concat.
+                        parts = value.split("'")
+                        return (
+                            "concat(" + ', "\'", '.join([f"'{p}'" for p in parts]) + ")"
+                        )
+
+                    if target_tag and target_name:
+                        predicates = [f"@name={_xpath_literal(str(target_name))}"]
+                        for attr_name, attr_val in (
+                            ("x", target_x),
+                            ("y", target_y),
+                            ("width", target_w),
+                            ("height", target_h),
+                        ):
+                            if attr_val is not None:
+                                predicates.append(f"@{attr_name}='{int(attr_val)}'")
+
+                        current_xpath = (
+                            f"//{target_tag}[" + " and ".join(predicates) + "]"
+                        )
+                        parent_xpath = current_xpath + "/.."
+                        parent_web_element = driver.get_element_by_xpath(
+                            parent_xpath, timeout=2
+                        )
+                        if parent_web_element is not None:
+                            parent_element = Element(web_element=parent_web_element)
+                            return parent_element
+                except Exception as e:
+                    logger.debug("get_parent_element root-xpath fallback failed: %s", e)
+            # TODO : android
+        except Exception as e:
+            logger.debug("get_parent_element failed: %s", e)
+            return Element()
+
+        return Element()
+
+    def rect(self) -> dict:
+        return self.web_element.rect if self.is_exist() else {}
 
     def is_displayed(self) -> bool:
         return self.web_element.is_displayed() if self.is_exist() else False
@@ -166,7 +265,9 @@ class Element:
         return self.get_attribute_str("text")
 
     # custom attributes
-    def is_exist(self) -> bool:
+    def is_exist(self, text=None) -> bool:
+        if text is not None:
+            return self.web_element is not None and self.text() == text
         return self.web_element is not None
 
     def tap(self, delay_after_tap=1) -> bool:
@@ -186,7 +287,13 @@ class Element:
 
         try:
             self.web_element.send_keys(text)
-            Utils.delay(delay_after_send)
+
+            if delay_after_send > 0:
+                Utils.delay(delay_after_send)
+
+            from ..driver import driver
+
+            driver.hide_keyboard()
             return True
         except Exception as e:
             return False
@@ -198,6 +305,9 @@ class Element:
             return self._android_class()
         else:
             return ""
+
+    def rect_by_key(self, rect_name: str) -> int:
+        return self.rect().get(rect_name, 0)
 
     # custom attributes - text
     def text(self) -> str:
@@ -216,16 +326,16 @@ class Element:
         return self.y() + self.height() // 2
 
     def x(self) -> int:
-        return self.rect("x")
+        return self.rect_by_key("x")
 
     def y(self) -> int:
-        return self.rect("y")
+        return self.rect_by_key("y")
 
     def width(self) -> int:
-        return self.rect("width")
+        return self.rect_by_key("width")
 
     def height(self) -> int:
-        return self.rect("height")
+        return self.rect_by_key("height")
 
     # custom attributes - type checks
     def is_type(self, type: str) -> bool:
