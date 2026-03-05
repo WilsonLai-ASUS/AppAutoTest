@@ -28,7 +28,19 @@ Thumbs.db
 
 # Test Reports
 results/
+test-results/
+reports/
 *.log
+
+# GitHub Actions self-hosted runner (MUST NOT be committed)
+actions-runner/
+
+# Appium server log
+appium.log
+
+# Recordings / screenshots artifacts (usually under results/, but keep safe)
+*.mp4
+*.png
 
 # Screenshots
 # *.png
