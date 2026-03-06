@@ -1,5 +1,11 @@
 name: mobile-e2e
 
+env:
+  # If your app binaries are NOT committed (e.g. *.ipa/*.apk are gitignored),
+  # copy them from a local absolute path on the self-hosted runner.
+  LOCAL_IOS_APP_PATH: "/Users/asus/Desktop/App/AppAutoTest/apps/ios/AsusRouter.ipa"
+  LOCAL_ANDROID_APP_PATH: "/Users/asus/Desktop/App/AppAutoTest/apps/android/AsusRouter.apk"
+
 on:
   pull_request:
     branches:
@@ -16,12 +22,28 @@ on:
       - requirements.txt
   workflow_dispatch:
     inputs:
+      platform:
+        description: "Platform to run (ios|android|both)"
+        required: false
+        default: ""
+      dut:
+        description: "DUT name (used to build default config/dut/<DUT>.json)"
+        required: false
+        default: ""
       test_target:
         description: "Test module (e.g. tests.test_qis_asus_router) or file path (e.g. tests/test_qis_asus_router.py)"
         required: true
         default: "tests.test_qis_asus_router"
       dut_config:
-        description: "Optional DUT config path (e.g. config/dut/GS-BE12000.json)"
+        description: "Optional DUT config path override (e.g. config/dut/GS-BE18000.json)"
+        required: false
+        default: ""
+      app_config_ios:
+        description: "Optional iOS app config override"
+        required: false
+        default: ""
+      app_config_android:
+        description: "Optional Android app config override"
         required: false
         default: ""
 
@@ -31,16 +53,22 @@ jobs:
     # with real iOS + Android devices attached and Appium installed.
     runs-on: [self-hosted, macOS]
 
+    # Ensure only one job uses the same DUT at a time.
+    # Note: GitHub Actions `concurrency` is repository-scoped.
+    # Cross-repo mutual exclusion is typically achieved by:
+    # 1) running only ONE self-hosted runner instance for the shared device lab (so only one job runs at a time), and
+    # 2) using the shared DUT cooldown state file on that machine (see scripts/dut_cooldown.sh) from each repo's workflow.
+    concurrency:
+      group: dut-${{ (github.event_name == 'workflow_dispatch' && inputs.dut != '' && inputs.dut) || matrix.dut }}
+      cancel-in-progress: false
+
 
     strategy:
       fail-fast: false
       max-parallel: 1 # one runner + real devices: avoid parallel contention
       matrix:
-        include:
-          - platform: ios
-            app_config: config/app/ios_config.json
-          - platform: android
-            app_config: config/app/android_config.json
+        platform: [ios, android]
+        dut: [GS-BE18000] # expand this list with more DUTs as needed, and ensure corresponding config/dut/*.json files exist
 
     steps:
       - name: Checkout
@@ -69,6 +97,55 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
+      - name: Ensure app binary exists (local copy)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == '' || inputs.platform == 'both' || inputs.platform == matrix.platform }}
+        shell: bash
+        env:
+          MATRIX_PLATFORM: ${{ matrix.platform }}
+          APP_CONFIG_IOS_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.app_config_ios || '' }}
+          APP_CONFIG_ANDROID_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.app_config_android || '' }}
+          LOCAL_APP_PATH: ${{ matrix.platform == 'ios' && env.LOCAL_IOS_APP_PATH || env.LOCAL_ANDROID_APP_PATH }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${MATRIX_PLATFORM}" == "ios" ]]; then
+            APP_CONFIG="${APP_CONFIG_IOS_OVERRIDE:-config/app/ios_config.json}"
+          else
+            APP_CONFIG="${APP_CONFIG_ANDROID_OVERRIDE:-config/app/android_config.json}"
+          fi
+          export APP_CONFIG
+
+          APP_PATH=$(python - <<'PY'
+          import json, os
+          with open(os.environ["APP_CONFIG"], "r", encoding="utf-8") as f:
+              cfg = json.load(f)
+          print(cfg.get("app_path", ""))
+          PY
+          )
+
+          if [[ -z "${APP_PATH}" ]]; then
+            echo "app_path is missing in ${APP_CONFIG}"
+            exit 2
+          fi
+
+          if [[ -f "${APP_PATH}" ]]; then
+            echo "App already present: ${APP_PATH}"
+            exit 0
+          fi
+
+          if [[ -n "${LOCAL_APP_PATH}" && -f "${LOCAL_APP_PATH}" ]]; then
+            mkdir -p "$(dirname "${APP_PATH}")"
+            echo "Copying app from local path: ${LOCAL_APP_PATH} -> ${APP_PATH}"
+            cp -f "${LOCAL_APP_PATH}" "${APP_PATH}"
+            ls -lah "${APP_PATH}"
+            exit 0
+          fi
+
+          echo "App not found at ${APP_PATH}"
+          echo "Local app file also not found: ${LOCAL_APP_PATH}"
+          echo "Fix by placing the binary on the self-hosted runner and updating LOCAL_IOS_APP_PATH / LOCAL_ANDROID_APP_PATH in this workflow."
+          exit 2
+
       - name: Ensure Appium is running (best-effort)
         shell: bash
         run: |
@@ -86,18 +163,45 @@ jobs:
             echo "appium command not found; assuming Appium is managed outside the workflow"
           fi
 
-      - name: Run test (${{ matrix.platform }})
+      - name: Run test (${{ matrix.platform }}, ${{ matrix.dut }})
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == '' || inputs.platform == 'both' || inputs.platform == matrix.platform }}
         shell: bash
         env:
-          APP_CONFIG: ${{ matrix.app_config }}
-          TEST_TARGET: ${{ inputs.test_target }}
-          DUT_CONFIG: ${{ inputs.dut_config }}
+          PLATFORM: ${{ matrix.platform }}
+          MATRIX_PLATFORM: ${{ matrix.platform }}
+          MATRIX_DUT: ${{ matrix.dut }}
+          APP_CONFIG_IOS_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.app_config_ios || '' }}
+          APP_CONFIG_ANDROID_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.app_config_android || '' }}
+          TEST_TARGET: ${{ (github.event_name == 'workflow_dispatch' && inputs.test_target) || '' }}
+          DUT_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.dut || '' }}
+          DUT_CONFIG_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.dut_config || '' }}
         run: |
           set -euo pipefail
 
-          # On pull_request triggers there are no workflow_dispatch inputs.
+          if [[ "${MATRIX_PLATFORM}" == "ios" ]]; then
+            APP_CONFIG="${APP_CONFIG_IOS_OVERRIDE:-config/app/ios_config.json}"
+          else
+            APP_CONFIG="${APP_CONFIG_ANDROID_OVERRIDE:-config/app/android_config.json}"
+          fi
+          export APP_CONFIG
+
+          DUT="${DUT_OVERRIDE:-${MATRIX_DUT}}"
+
+          # DUT reset cooldown guard (in case a previous run was interrupted).
+          DUT="${DUT}" COOLDOWN_S=300 bash scripts/dut_cooldown.sh wait
+
           TEST_TARGET="${TEST_TARGET:-tests.test_qis_asus_router}"
-          DUT_CONFIG="${DUT_CONFIG:-}"
+          if [[ -n "${DUT_CONFIG_OVERRIDE}" ]]; then
+            DUT_CONFIG="${DUT_CONFIG_OVERRIDE}"
+          else
+            DUT_CONFIG="config/dut/${DUT}.json"
+          fi
+
+          if [[ ! -f "${DUT_CONFIG}" ]]; then
+            echo "DUT config file not found: ${DUT_CONFIG}"
+            echo "Fix by editing the matrix.dut list in .github/workflows/mobile-e2e.yml"
+            exit 2
+          fi
 
           DUT_ARGS=""
           if [[ -n "${DUT_CONFIG}" ]]; then
@@ -113,11 +217,20 @@ jobs:
           fi
 
       - name: Upload results
-        if: always()
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.platform == '' || inputs.platform == 'both' || inputs.platform == matrix.platform) }}
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ matrix.platform }}-${{ github.run_id }}
+          name: results-${{ matrix.platform }}-${{ (github.event_name == 'workflow_dispatch' && inputs.dut != '' && inputs.dut) || matrix.dut }}-${{ github.run_id }}
           path: |
             results/**
             appium.log
           if-no-files-found: warn
+
+      - name: Mark DUT finished time
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.platform == '' || inputs.platform == 'both' || inputs.platform == matrix.platform) }}
+        shell: bash
+        env:
+          DUT: ${{ (github.event_name == 'workflow_dispatch' && inputs.dut != '' && inputs.dut) || matrix.dut }}
+        run: |
+          set -euo pipefail
+          bash scripts/dut_cooldown.sh mark
