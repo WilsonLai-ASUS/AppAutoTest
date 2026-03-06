@@ -297,7 +297,7 @@ class TestBase:
 
         # not on privacy policy page, skip the test and return success
         if app.is_ios():
-            if title_bar.is_exist("Privacy Policy") == False:
+            if title_bar.is_exist("ASUS PRIVACY NOTICE") == False:
                 logger.info("Not on Privacy Policy page, skipping Privacy Policy test")
                 return
         else:
