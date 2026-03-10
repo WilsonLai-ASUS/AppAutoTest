@@ -786,14 +786,100 @@ class Driver:
         if not (self.is_exist() and app.is_ios()):
             return
 
+        def _tap_center(el, *, name: str = "element") -> bool:
+            """Best-effort tap for iOS/iPadOS: prefer coordinate tap to avoid non-hittable staticText."""
+            if el is None:
+                return False
+            try:
+                rect = getattr(el, "rect", None) or {}
+                x = rect.get("x")
+                y = rect.get("y")
+                w = rect.get("width")
+                h = rect.get("height")
+                if None not in (x, y, w, h) and w and h:
+                    cx = int(x + w / 2)
+                    cy = int(y + h / 2)
+                    self.web_driver.execute_script(
+                        "mobile: tap", {"x": cx, "y": cy}
+                    )
+                    return True
+            except Exception:
+                pass
+
+            try:
+                el.click()
+                return True
+            except Exception as e:
+                logger.warn(f"Failed to tap {name}: {e}")
+                return False
+
+        def _wifi_table_rect():
+            """Return rect of Wi-Fi networks list area (important on iPad split layout)."""
+            # iPadOS Settings often has multiple tables (left sidebar + right content).
+            # Pick the largest visible table as the most likely Wi-Fi list container.
+            try:
+                tables = self.web_driver.find_elements(
+                    AppiumBy.XPATH, "//XCUIElementTypeTable"
+                )
+            except Exception:
+                tables = []
+
+            best_rect = None
+            best_area = 0
+            for t in tables:
+                try:
+                    if not t or not t.is_displayed():
+                        continue
+                    rect = getattr(t, "rect", None) or {}
+                    w = rect.get("width") or 0
+                    h = rect.get("height") or 0
+                    area = float(w) * float(h)
+                    if area > best_area and w > 0 and h > 0:
+                        best_area = area
+                        best_rect = rect
+                except Exception:
+                    continue
+
+            if best_rect:
+                return best_rect
+
+            for xp in ("//XCUIElementTypeScrollView",):
+                try:
+                    el = self.get_element_by_xpath(xp, timeout=1)
+                    if el and el.is_displayed():
+                        rect = getattr(el, "rect", None)
+                        if rect and rect.get("width") and rect.get("height"):
+                            return rect
+                except Exception:
+                    pass
+            return None
+
+        def _wait_wifi_join_ui(timeout_s: float = 3.0) -> bool:
+            import time as _time
+
+            end_at = _time.time() + float(timeout_s)
+            while _time.time() < end_at:
+                try:
+                    if self.web_driver.find_elements(
+                        AppiumBy.XPATH,
+                        "//XCUIElementTypeSecureTextField | //XCUIElementTypeButton[@name='Join'] | //XCUIElementTypeStaticText[@name='Password']",
+                    ):
+                        return True
+                except Exception:
+                    pass
+                Utils.delay(0.2)
+            return False
+
         # step 1: goto ios settings app
         self.goto_ios_settings_app()
 
         # step 2: enter wifi settings page
-        self.swipe_down(progress={"begin": 0.2, "end": 1.0}, duration=0.05)
+        # iPadOS Settings often has a split layout; avoid ultra-short swipes.
+        self.swipe_down(progress={"begin": 0.2, "end": 1.0}, duration=0.2)
 
         wifi_xpath_candidates = [
-            '//XCUIElementTypeCell[@name="Wi-Fi"]',
+            # Prefer tapping the Cell (works on iPhone/iPad and avoids tapping label only)
+            '//XCUIElementTypeCell[@name="Wi-Fi" or .//XCUIElementTypeStaticText[@name="Wi-Fi"]]',
             '//XCUIElementTypeButton[@name="Wi-Fi"]',
             '//XCUIElementTypeStaticText[@name="Wi-Fi"]',
             '//XCUIElementTypeButton[@name="com.apple.settings.wifi"]',
@@ -810,24 +896,28 @@ class Driver:
                 pass
 
         if wifi_element:
-            wifi_element.click()
+            _tap_center(wifi_element, name="Wi-Fi entry")
             logger.info("Found and tapped Wi-Fi entry in Settings")
             Utils.delay(5)
         else:
             logger.warn("Cannot find Wi-Fi entry in Settings.")
 
         # step 3: find and tap target SSID, scroll if not visible
-        self.swipe_down(progress={"begin": 0.2, "end": 1.0}, duration=0.05)
+        table_rect = _wifi_table_rect()
+        self.swipe_down(
+            rect=table_rect, progress={"begin": 0.2, "end": 1.0}, duration=0.2
+        )
 
         max_scroll_attempts = 10
         ssid_element = None
         for i in range(max_scroll_attempts):
+            # Prefer the whole Cell row instead of StaticText (StaticText is often not tappable on iPad)
             try:
                 element = self.get_element_by_ios_class_chain(
-                    f'**/XCUIElementTypeStaticText[`name == "{ssid}"`]'
+                    f'**/XCUIElementTypeCell[`name == "{ssid}"`]' 
                 )
                 if element and element.is_displayed():
-                    logger.debug(f"Found SSID '{ssid}' using class chain")
+                    logger.debug(f"Found SSID '{ssid}' cell using class chain")
                     ssid_element = element
                     break
             except Exception:
@@ -835,10 +925,10 @@ class Driver:
 
             try:
                 element = self.get_element_by_xpath(
-                    f'//XCUIElementTypeStaticText[@name="{ssid}"]'
+                    f'//XCUIElementTypeCell[@name="{ssid}" or .//XCUIElementTypeStaticText[@name="{ssid}"]]'
                 )
                 if element and element.is_displayed():
-                    logger.debug(f"Found SSID '{ssid}' using XPath")
+                    logger.debug(f"Found SSID '{ssid}' cell using XPath")
                     ssid_element = element
                     break
             except Exception:
@@ -847,11 +937,18 @@ class Driver:
             logger.debug(
                 f"SSID '{ssid}' not found, swiping up to scroll the list (attempt {i + 1}/{max_scroll_attempts})"
             )
-            self.swipe_up(progress={"begin": 0.05, "end": 0.95}, duration=2)
+            self.swipe_up(rect=table_rect, progress={"begin": 0.1, "end": 0.9}, duration=1.0)
             Utils.delay(1)
 
         if ssid_element and ssid_element.is_displayed():
-            ssid_element.click()
+            # Some devices show the label but the tap doesn't register; use coordinate tap + verify.
+            _tap_center(ssid_element, name=f"SSID '{ssid}'")
+            if not _wait_wifi_join_ui(timeout_s=2.0):
+                logger.warn(
+                    f"Tapped SSID '{ssid}' but no join/password UI detected; retrying tap"
+                )
+                Utils.delay(0.5)
+                _tap_center(ssid_element, name=f"SSID '{ssid}' (retry)")
             logger.info(f"Found and tapped SSID '{ssid}'")
         else:
             raise Exception(f"SSID '{ssid}' not found in Wi-Fi list after scrolling")
@@ -860,23 +957,34 @@ class Driver:
         if password:
             Utils.delay(1)
 
+            join_button = None
             try:
                 join_button = self.get_element_by_xpath(
-                    '//XCUIElementTypeButton[@name="Join"]'
+                    '//XCUIElementTypeButton[@name="Join"]', timeout=2
                 )
-            except Exception as e:
-                pass
-            finally:
-                if join_button:
+            except Exception:
+                join_button = None
+
+            try:
+                password_field = self.get_element_by_xpath(
+                    "//XCUIElementTypeSecureTextField", timeout=2
+                )
+                if password_field:
+                    _tap_center(password_field, name="Wi-Fi password field")
                     try:
-                        password_field = self.get_element_by_xpath(
-                            "//XCUIElementTypeSecureTextField"
-                        )
-                        password_field.click()
-                        password_field.send_keys(password)
-                        join_button.click()
-                    except Exception as e:
-                        raise Exception(f"Wi-Fi password field not found: {e}")
+                        password_field.clear()
+                    except Exception:
+                        pass
+                    password_field.send_keys(password)
+                else:
+                    raise Exception("Wi-Fi password field not found")
+
+                if join_button:
+                    _tap_center(join_button, name="Join")
+                else:
+                    logger.warn("Join button not found; password entered but cannot tap Join")
+            except Exception as e:
+                raise Exception(f"Wi-Fi password input failed: {e}")
 
         logger.info(f"Delaying after Wi-Fi connection attempt...")
         Utils.delay(10)
