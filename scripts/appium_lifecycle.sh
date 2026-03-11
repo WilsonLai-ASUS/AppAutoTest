@@ -45,7 +45,7 @@ shift || true
 port="4723"
 base_path="/"
 log_file="appium.log"
-wait_s="10"
+wait_s="30"
 pid=""
 
 while [[ $# -gt 0 ]]; do
@@ -93,12 +93,22 @@ case "${cmd}" in
     write_output started true
     write_output pid "${pid}"
 
-    # Wait briefly for socket to be available
-    sleep 2
-    if ! is_listening "${port}"; then
-      echo "Appium failed to listen on :${port}" >&2
-      exit 2
+    # Wait for the socket to be available. Driver loading can take a few seconds,
+    # so poll up to wait_s seconds instead of a fixed sleep.
+    for _ in $(seq 1 "${wait_s}"); do
+      if is_listening "${port}"; then
+        exit 0
+      fi
+      sleep 1
+    done
+
+    echo "Appium failed to listen on :${port} within ${wait_s}s" >&2
+    if [[ -f "${log_file}" ]]; then
+      echo "=== tail -n 200 ${log_file} ===" >&2
+      tail -n 200 "${log_file}" >&2 || true
+      echo "=== end tail ${log_file} ===" >&2
     fi
+    exit 2
     ;;
 
   stop)
