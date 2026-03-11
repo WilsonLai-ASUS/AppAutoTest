@@ -1,0 +1,10 @@
+{
+    "appium_server": "http://127.0.0.1:4723",
+    "log_level": "DEBUG",
+    "results_dir": "results",
+    "platform_name": "Android",
+    "device_name": "Android Device",
+    "udid": "ce031713353b7ce60c",
+    "app_id": "com.asus.aihome",
+    "app_path": "apps/android/AsusRouter.apk"
+}

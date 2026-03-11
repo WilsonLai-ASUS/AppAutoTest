@@ -1,0 +1,10 @@
+{
+    "appium_server": "http://127.0.0.1:4723",
+    "log_level": "DEBUG",
+    "results_dir": "results",
+    "platform_name": "iOS",
+    "device_name": "iPhone",
+    "udid": "00008020-001568A23689002E",
+    "app_id": "com.asus.asusrouter",
+    "app_path": "apps/ios/AsusRouter.ipa"
+}
