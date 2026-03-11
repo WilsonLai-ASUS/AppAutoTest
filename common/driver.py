@@ -645,6 +645,149 @@ class Driver:
 
         return False
 
+    def _android_get_main_wifi_switch(self):
+        """Best-effort: locate the main Wi-Fi on/off switch on the Wi-Fi settings page."""
+        if not (self.is_exist() and app.is_android()):
+            return None
+
+        candidates = []
+
+        # Try common resource-ids first.
+        for xp in (
+            "//*[@resource-id='com.android.settings:id/switch_widget']",
+            "//*[@resource-id='android:id/switch_widget']",
+            "//*[@resource-id='com.samsung.android.settings:id/switch_widget']",
+            "//*[@resource-id='com.android.settings:id/switch_button']",
+            "//*[@resource-id='android:id/switch_button']",
+            "//*[@resource-id='com.samsung.android.settings:id/switch_button']",
+        ):
+            try:
+                els = self.web_driver.find_elements(AppiumBy.XPATH, xp)
+            except Exception:
+                els = []
+            for el in els or []:
+                try:
+                    if el and el.is_displayed():
+                        candidates.append(el)
+                except Exception:
+                    continue
+
+        # Fallback: any visible Switch.
+        if not candidates:
+            try:
+                els = self.web_driver.find_elements(AppiumBy.XPATH, "//android.widget.Switch")
+            except Exception:
+                els = []
+            for el in els or []:
+                try:
+                    if el and el.is_displayed():
+                        candidates.append(el)
+                except Exception:
+                    continue
+
+        if not candidates:
+            return None
+
+        # Prefer the top-most switch (main Wi-Fi toggle is usually near the top).
+        def _y(el):
+            try:
+                rect = getattr(el, "rect", None) or {}
+                return float(rect.get("y") or 999999)
+            except Exception:
+                return 999999
+
+        candidates.sort(key=_y)
+        return candidates[0]
+
+    def _android_wifi_switch_state(self, el):
+        """Return True/False if state can be determined, else None."""
+        if el is None:
+            return None
+
+        try:
+            checked = el.get_attribute("checked")
+            if checked in (True, "true", "True", 1, "1"):
+                return True
+            if checked in (False, "false", "False", 0, "0"):
+                return False
+        except Exception:
+            pass
+
+        for attr in ("text", "value", "content-desc", "contentDescription"):
+            try:
+                v = el.get_attribute(attr)
+            except Exception:
+                v = None
+            if not v:
+                continue
+            t = str(v).strip().lower()
+            if t in ("on", "開", "開啟", "已開啟", "開啟中", "enable", "enabled", "開啟 wi-fi"):
+                return True
+            if t in ("off", "關", "關閉", "已關閉", "disable", "disabled", "關閉 wi-fi"):
+                return False
+
+        return None
+
+    def _android_wait_wifi_switch(self, *, expected_on: bool, timeout_s: float = 15.0) -> bool:
+        import time as _time
+
+        end_at = _time.time() + float(timeout_s)
+        while _time.time() < end_at:
+            el = self._android_get_main_wifi_switch()
+            state = self._android_wifi_switch_state(el)
+            if state is not None and bool(state) == bool(expected_on):
+                return True
+            Utils.delay(0.3)
+        return False
+
+    def _android_restart_wifi_if_on(self, *, wait_after_on_s: float = 10.0) -> bool:
+        """If Wi-Fi is ON, toggle it OFF then ON; after ON, wait wait_after_on_s seconds."""
+        if not (self.is_exist() and app.is_android()):
+            return False
+
+        el = self._android_get_main_wifi_switch()
+        state = self._android_wifi_switch_state(el)
+        if state is None:
+            logger.debug("Unable to determine Wi-Fi switch state; skip Wi-Fi restart")
+            return False
+
+        if state is not True:
+            logger.debug("Wi-Fi switch is not ON; skip Wi-Fi restart")
+            return False
+
+        logger.info("Wi-Fi is ON; toggling OFF then ON before searching SSID")
+
+        try:
+            el.click()
+        except Exception:
+            # Re-find and retry once.
+            try:
+                el = self._android_get_main_wifi_switch()
+                if el:
+                    el.click()
+            except Exception:
+                logger.warn("Failed to toggle Wi-Fi OFF")
+                return False
+
+        if not self._android_wait_wifi_switch(expected_on=False, timeout_s=15.0):
+            logger.warn("Wi-Fi did not switch to OFF in time")
+
+        # Toggle ON
+        try:
+            el = self._android_get_main_wifi_switch()
+            if el:
+                el.click()
+        except Exception:
+            logger.warn("Failed to toggle Wi-Fi ON")
+            return False
+
+        if not self._android_wait_wifi_switch(expected_on=True, timeout_s=20.0):
+            logger.warn("Wi-Fi did not switch to ON in time")
+
+        logger.info(f"Waiting {int(wait_after_on_s)} seconds after Wi-Fi ON...")
+        Utils.delay(wait_after_on_s)
+        return True
+
     def connect_android_wifi(self, ssid, password=None):
         if not (self.is_exist() and app.is_android()):
             return
@@ -691,6 +834,12 @@ class Driver:
 
             if not opened:
                 logger.warn("Unable to navigate to Wi-Fi settings via UI fallback")
+
+        # step 2.5: (requested) restart Wi-Fi when switch shows ON, then wait 10s before searching SSID
+        try:
+            self._android_restart_wifi_if_on(wait_after_on_s=10)
+        except Exception as e:
+            logger.warn("Wi-Fi restart step failed (ignored): %s", e)
 
         # step 3: find SSID and tap it (scroll if needed)
         ssid_tapped = False
