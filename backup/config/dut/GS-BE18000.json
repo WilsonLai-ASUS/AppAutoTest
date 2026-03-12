@@ -1,13 +1,13 @@
 {
-    "ip": "192.168.50.1",
-    "model_name": "GS-BE18000",
-    "default_local_username": "admin",
     "default_local_password": "kfi5a6r39#",
-    "default_wifi_ssid": "ASUS_60",
+    "default_local_username": "admin",
     "default_wifi_password": "",
-    "local_username": "admin",
+    "default_wifi_ssid": "ASUS_60",
+    "ip": "192.168.50.1",
+    "is_qis_support_create_iot_network": true,
     "local_password": "asus#12345",
-    "wifi_ssid": "#AppAutoTest_GS-BE18000",
+    "local_username": "admin",
+    "model_name": "GS-BE18000",
     "wifi_password": "asus#12345",
-    "is_support_default_password": false
+    "wifi_ssid": "#AppAutoTest_GS-BE18000"
 }

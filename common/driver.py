@@ -241,7 +241,7 @@ class Driver:
                 AppiumBy.IOS_PREDICATE, predicate_string
             )
         except:
-            return []  # 找不到元素就回傳空 list
+            return []  # Return empty list if not found
 
     def get_element_by_ios_predicate_string(self, predicate_string, timeout=1):
         elements = self.get_elements_by_ios_predicate_string(predicate_string, timeout)
@@ -251,7 +251,7 @@ class Driver:
         try:
             return self.web_driver.find_elements(AppiumBy.IOS_CLASS_CHAIN, class_chain)
         except:
-            return []  # 找不到元素就回傳空 list
+            return []  # Return empty list if not found
 
     def get_element_by_ios_class_chain(self, class_chain, timeout=1):
         elements = self.get_elements_by_ios_class_chain(class_chain, timeout)
@@ -261,7 +261,7 @@ class Driver:
         try:
             return self.web_driver.find_elements(AppiumBy.ID, android_id)
         except:
-            return []  # 找不到元素就回傳空 list
+            return []  # Return empty list if not found
 
     def get_element_by_android_id(self, android_id, timeout=1):
         elements = self.get_elements_by_android_id(android_id, timeout)
@@ -273,15 +273,15 @@ class Driver:
             elements = wait.until(
                 EC.presence_of_all_elements_located((AppiumBy.XPATH, xpath))
             )
-            return elements  # list，可能有多個元素
+            return elements  # list; may contain multiple elements
         except:
-            return []  # 找不到元素就回傳空 list
+            return []  # Return empty list if not found
 
     def get_element_by_xpath(self, xpath, timeout=1):
         elements = self.get_elements_by_xpath(xpath, timeout)
         return (
             elements[-1] if elements else None
-        )  # 回傳最後一個元素，如果找不到就回傳 None
+        )  # Return last element; None if not found
 
     def window_size(self):
         try:
@@ -330,7 +330,7 @@ class Driver:
                 direction_log += "down"
 
             logger.debug(
-                f"Swiping \"{direction_log}\" from ({x1}, {y1}) to ({x2}, {y2}) with duration {duration}s"
+                f'Swiping "{direction_log}" from ({x1}, {y1}) to ({x2}, {y2}) with duration {duration}s'
             )
             try:
                 self.web_driver.swipe(x1, y1, x2, y2, duration * 1000)
@@ -349,7 +349,7 @@ class Driver:
         duration=0.5,
         delay_after=1.0,
     ):
-        """向上滑動"""
+        """Swipe up."""
         begin_progress = progress.get("begin", 0.2)
         end_progress = progress.get("end", 1.0)
 
@@ -376,7 +376,7 @@ class Driver:
         duration=0.5,
         delay_after=1.0,
     ):
-        """向下滑動"""
+        """Swipe down."""
         begin_progress = progress.get("begin", 0.2)
         end_progress = progress.get("end", 1.0)
 
@@ -401,7 +401,7 @@ class Driver:
         duration=0.5,
         delay_after=1.0,
     ):
-        """向左滑動"""
+        """Swipe left."""
         begin_progress = progress.get("begin", 0.2)
         end_progress = progress.get("end", 1.0)
 
@@ -426,7 +426,7 @@ class Driver:
         duration=0.5,
         delay_after=1.0,
     ):
-        """向右滑動"""
+        """Swipe right."""
         begin_progress = progress.get("begin", 0.2)
         end_progress = progress.get("end", 1.0)
 
@@ -474,7 +474,7 @@ class Driver:
 
         # step 4: try tapping "Done" button for iOS
         if app.is_ios():
-            for name in ("Done", "完成"):
+            for name in ("Done",):
                 try:
                     btn = self.get_element_by_xpath(
                         f'//XCUIElementTypeButton[@name="{name}"]', timeout=1
@@ -675,7 +675,9 @@ class Driver:
         # Fallback: any visible Switch.
         if not candidates:
             try:
-                els = self.web_driver.find_elements(AppiumBy.XPATH, "//android.widget.Switch")
+                els = self.web_driver.find_elements(
+                    AppiumBy.XPATH, "//android.widget.Switch"
+                )
             except Exception:
                 els = []
             for el in els or []:
@@ -721,14 +723,16 @@ class Driver:
             if not v:
                 continue
             t = str(v).strip().lower()
-            if t in ("on", "開", "開啟", "已開啟", "開啟中", "enable", "enabled", "開啟 wi-fi"):
+            if t in ("on", "enable", "enabled"):
                 return True
-            if t in ("off", "關", "關閉", "已關閉", "disable", "disabled", "關閉 wi-fi"):
+            if t in ("off", "disable", "disabled"):
                 return False
 
         return None
 
-    def _android_wait_wifi_switch(self, *, expected_on: bool, timeout_s: float = 15.0) -> bool:
+    def _android_wait_wifi_switch(
+        self, *, expected_on: bool, timeout_s: float = 15.0
+    ) -> bool:
         import time as _time
 
         end_at = _time.time() + float(timeout_s)
@@ -814,21 +818,20 @@ class Driver:
                 return True
 
             opened = _try_flow(
-                first=["Network & internet", "網路和網際網路"],
-                second=["Internet", "網際網路"],
+                first=["Network & internet"],
+                second=["Internet"],
             )
 
             if not opened:
                 # Reset to Settings home for the next attempt.
                 self.goto_android_settings_app(delay=1)
                 opened = _try_flow(
-                    first=["Connections", "連線", "連接"],
+                    first=["Connections"],
                     second=[
                         "WiFi",
                         "Wi‑Fi",
                         "Wi-Fi",
                         "WLAN",
-                        "無線網路",
                     ],
                 )
 
@@ -922,9 +925,7 @@ class Driver:
                 logger.warn("Password field not found; attempting to connect anyway")
 
         # Tap connect/join/save if present
-        if self._android_find_and_tap_text(
-            ["Connect", "連線", "加入", "Join", "Save", "儲存"], timeout=2
-        ):
+        if self._android_find_and_tap_text(["Connect", "Join", "Save"], timeout=2):
             logger.info("Tapped Connect/Join/Save button in Wi-Fi dialog")
             Utils.delay(2)
 
@@ -948,9 +949,7 @@ class Driver:
                 if None not in (x, y, w, h) and w and h:
                     cx = int(x + w / 2)
                     cy = int(y + h / 2)
-                    self.web_driver.execute_script(
-                        "mobile: tap", {"x": cx, "y": cy}
-                    )
+                    self.web_driver.execute_script("mobile: tap", {"x": cx, "y": cy})
                     return True
             except Exception:
                 pass
@@ -1011,13 +1010,90 @@ class Driver:
                 try:
                     if self.web_driver.find_elements(
                         AppiumBy.XPATH,
-                        "//XCUIElementTypeSecureTextField | //XCUIElementTypeButton[@name='Join'] | //XCUIElementTypeStaticText[@name='Password']",
+                        # Only treat *editable* password prompt or Join button as join UI.
+                        # Wi-Fi details page can show a 'Password' row without any editable field.
+                        "//XCUIElementTypeSecureTextField | //XCUIElementTypeTextField | //XCUIElementTypeButton[@name='Join']",
                     ):
                         return True
                 except Exception:
                     pass
                 Utils.delay(0.2)
             return False
+
+        def _wait_wifi_connected_or_saved(timeout_s: float = 3.0) -> bool:
+            """Best-effort: detect already-connected / already-saved network state.
+
+            iOS may auto-join a known network without showing Join/Password UI.
+            """
+            import time as _time
+
+            end_at = _time.time() + float(timeout_s)
+            connected_texts = ("Connected",)
+            # Saved-network indicators shown on the Wi-Fi details page.
+            forget_texts = ("Forget This Network",)
+            auto_join_texts = ("Auto-Join",)
+
+            while _time.time() < end_at:
+                try:
+                    # Common indicators on the Wi-Fi details page.
+                    for t in forget_texts:
+                        if self.web_driver.find_elements(
+                            AppiumBy.XPATH,
+                            # Depending on iOS version, it can be a Cell/StaticText/Button.
+                            f"//XCUIElementTypeButton[@name='{t}'] | //XCUIElementTypeCell[@name='{t}' or .//XCUIElementTypeStaticText[@name='{t}']] | //XCUIElementTypeStaticText[@name='{t}']",
+                        ):
+                            return True
+
+                    for t in auto_join_texts:
+                        if self.web_driver.find_elements(
+                            AppiumBy.XPATH,
+                            f"//XCUIElementTypeStaticText[@name='{t}'] | //XCUIElementTypeCell[.//XCUIElementTypeStaticText[@name='{t}']]",
+                        ):
+                            return True
+
+                    for t in connected_texts:
+                        if self.web_driver.find_elements(
+                            AppiumBy.XPATH,
+                            f"//XCUIElementTypeStaticText[@name='{t}']",
+                        ):
+                            return True
+
+                    # Wi-Fi list checkmark: many iOS versions expose it via cell @value.
+                    try:
+                        if self.web_driver.find_elements(
+                            AppiumBy.XPATH,
+                            f"//XCUIElementTypeCell[@name=\"{ssid}\" and (@value='1' or contains(@value,'Connected'))]",
+                        ):
+                            return True
+                    except Exception:
+                        pass
+
+                    # Some iOS versions show a checkmark image in the list cell.
+                    try:
+                        if self.web_driver.find_elements(
+                            AppiumBy.XPATH,
+                            f"//XCUIElementTypeCell[@name=\"{ssid}\"]//XCUIElementTypeImage[contains(@name,'Selected') or contains(@name,'Check')]",
+                        ):
+                            return True
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+                Utils.delay(0.2)
+            return False
+
+        def _wait_join_or_connected(timeout_s: float = 6.0) -> str:
+            """Return 'join', 'connected', or '' for neither."""
+            import time as _time
+
+            end_at = _time.time() + float(timeout_s)
+            while _time.time() < end_at:
+                if _wait_wifi_join_ui(timeout_s=0.2):
+                    return "join"
+                if _wait_wifi_connected_or_saved(timeout_s=0.2):
+                    return "connected"
+            return ""
 
         # step 1: goto ios settings app
         self.goto_ios_settings_app()
@@ -1063,7 +1139,7 @@ class Driver:
             # Prefer the whole Cell row instead of StaticText (StaticText is often not tappable on iPad)
             try:
                 element = self.get_element_by_ios_class_chain(
-                    f'**/XCUIElementTypeCell[`name == "{ssid}"`]' 
+                    f'**/XCUIElementTypeCell[`name == "{ssid}"`]'
                 )
                 if element and element.is_displayed():
                     logger.debug(f"Found SSID '{ssid}' cell using class chain")
@@ -1086,18 +1162,26 @@ class Driver:
             logger.debug(
                 f"SSID '{ssid}' not found, swiping up to scroll the list (attempt {i + 1}/{max_scroll_attempts})"
             )
-            self.swipe_up(rect=table_rect, progress={"begin": 0.1, "end": 0.9}, duration=1.0)
+            self.swipe_up(
+                rect=table_rect, progress={"begin": 0.2, "end": 0.9}, duration=1.0
+            )
             Utils.delay(1)
 
         if ssid_element and ssid_element.is_displayed():
             # Some devices show the label but the tap doesn't register; use coordinate tap + verify.
             _tap_center(ssid_element, name=f"SSID '{ssid}'")
-            if not _wait_wifi_join_ui(timeout_s=2.0):
-                logger.warn(
-                    f"Tapped SSID '{ssid}' but no join/password UI detected; retrying tap"
-                )
-                Utils.delay(0.5)
-                _tap_center(ssid_element, name=f"SSID '{ssid}' (retry)")
+            # If the network is open (no password provided), iOS may auto-join without showing Join/Password UI.
+            # Only validate Join/Password UI when we expect to enter a password.
+            if password:
+                if not (
+                    _wait_wifi_join_ui(timeout_s=2.0)
+                    or _wait_wifi_connected_or_saved(timeout_s=2.0)
+                ):
+                    logger.warn(
+                        f"Tapped SSID '{ssid}' but no join/password UI detected; retrying tap"
+                    )
+                    Utils.delay(0.5)
+                    _tap_center(ssid_element, name=f"SSID '{ssid}' (retry)")
             logger.info(f"Found and tapped SSID '{ssid}'")
         else:
             raise Exception(f"SSID '{ssid}' not found in Wi-Fi list after scrolling")
@@ -1105,6 +1189,16 @@ class Driver:
         # step 4: input password if needed
         if password:
             Utils.delay(1)
+
+            # Make sure we are either on Join/Password UI or already connected.
+            state = _wait_join_or_connected(timeout_s=6.0)
+            if state == "connected":
+                logger.info(
+                    f"'{ssid}' appears already connected/saved; skipping password entry."
+                )
+                logger.info(f"Delaying after Wi-Fi connection attempt...")
+                Utils.delay(10)
+                return
 
             join_button = None
             try:
@@ -1116,7 +1210,8 @@ class Driver:
 
             try:
                 password_field = self.get_element_by_xpath(
-                    "//XCUIElementTypeSecureTextField", timeout=2
+                    "//XCUIElementTypeSecureTextField | //XCUIElementTypeTextField",
+                    timeout=2,
                 )
                 if password_field:
                     _tap_center(password_field, name="Wi-Fi password field")
@@ -1126,12 +1221,23 @@ class Driver:
                         pass
                     password_field.send_keys(password)
                 else:
-                    raise Exception("Wi-Fi password field not found")
+                    # If the network is already connected/saved, iOS may not show a password prompt.
+                    if _wait_wifi_connected_or_saved(timeout_s=6.0):
+                        logger.info(
+                            f"No password UI for '{ssid}'; network appears already connected/saved. Skipping password entry."
+                        )
+                        password_field = None
+                    else:
+                        raise Exception("Wi-Fi password field not found")
 
                 if join_button:
-                    _tap_center(join_button, name="Join")
+                    # Only tap Join if we actually entered a password.
+                    if password_field is not None:
+                        _tap_center(join_button, name="Join")
                 else:
-                    logger.warn("Join button not found; password entered but cannot tap Join")
+                    logger.warn(
+                        "Join button not found; password entered but cannot tap Join"
+                    )
             except Exception as e:
                 raise Exception(f"Wi-Fi password input failed: {e}")
 

@@ -18,6 +18,7 @@ import tests.pages.qis_setup_guide_join_page as qis_setup_guide_join_page
 import tests.pages.qis_system_setup_page_finish as qis_system_setup_page_finish
 import tests.pages.tab_bar_home_page as tab_bar_home_page
 import tests.pages.tab_bar_settings_page as tab_bar_settings_page
+import tests.pages.qis_isp_page as qis_isp_page
 
 
 class TestQisAsusRouter(TestBase):
@@ -44,6 +45,10 @@ class TestQisAsusRouter(TestBase):
             qis_manual_setup_page.tap_dhcp_button(self)
             qis_manual_setup_page.tap_next_button(self)
 
+            # qis - isp page
+            if dut.is_qis_support_isp():
+                qis_isp_page.tap_next_button(self)
+
             # qis - create wifi network page
             if app.is_ios():
                 qis_create_wifi_network_page.tap_ios_wifi_network_name_clear_text_button(
@@ -51,13 +56,16 @@ class TestQisAsusRouter(TestBase):
                 )
             qis_create_wifi_network_page.fill_wifi_network_name_text_field(self)
             qis_create_wifi_network_page.fill_wifi_network_password_text_field(self)
-            qis_create_wifi_network_page.tap_next_button(self)
+
+            if qis_create_wifi_network_page.is_page_displayed():
+                qis_create_wifi_network_page.tap_next_button(self)
 
             # qis - create iot network page
-            qis_create_iot_network_page.tap_set_up_later_button(self)
+            if dut.is_qis_support_create_iot_network():
+                qis_create_iot_network_page.tap_set_up_later_button(self)
 
             # qis - setup local login account page
-            if dut.is_support_default_password():
+            if dut.is_qis_support_default_password():
                 qis_setup_local_login_account_page.tap_use_default_local_login_password_button(
                     self
                 )
@@ -68,7 +76,9 @@ class TestQisAsusRouter(TestBase):
             qis_setup_local_login_account_page.fill_username_text_field(self)
             qis_setup_local_login_account_page.fill_password_text_field(self)
             qis_setup_local_login_account_page.fill_confirm_password_text_field(self)
-            qis_setup_local_login_account_page.tap_next_button(self)
+
+            if qis_setup_local_login_account_page.is_page_displayed():
+                qis_setup_local_login_account_page.tap_next_button(self)
 
             # qis - setup guide join page
             qis_setup_guide_join_page.wait_connect_to_your_wifi_label(self)

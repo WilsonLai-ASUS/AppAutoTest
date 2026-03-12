@@ -1,7 +1,7 @@
 """login page"""
 
 from tests.test_base import TestBase
-from common import Element, logger, ResultCode, Utils
+from common import Element, app, logger, ResultCode, Utils
 
 
 def get_setup_button() -> Element:
@@ -46,7 +46,10 @@ def tap_login_button(test: TestBase):
 
 
 def tap_setup_button(test: TestBase):
-    Utils.delay(4)
+    if app.is_ios():
+        Utils.delay(10)
+    else:
+        Utils.delay(5)
 
     # find setup button
     setup_button = get_setup_button()
