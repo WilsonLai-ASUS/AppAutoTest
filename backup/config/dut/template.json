@@ -1,10 +1,13 @@
 {
+    "bands": "2g/5g",
     "default_local_password": "kfi5a6r39#",
     "default_local_username": "admin",
     "default_wifi_password": "",
     "default_wifi_ssid": "ASUS_60",
     "ip": "192.168.50.1",
     "is_qis_support_create_iot_network": true,
+    "is_qis_support_default_password": false,
+    "is_qis_support_isp": true,
     "local_password": "asus#12345",
     "local_username": "admin",
     "model_name": "GS-BE18000",

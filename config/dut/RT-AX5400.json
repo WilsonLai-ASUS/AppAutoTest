@@ -1,0 +1,15 @@
+{
+    "bands": "2g/5g",
+    "default_local_password": "admin",
+    "default_local_username": "admin",
+    "default_wifi_password": "88888888",
+    "default_wifi_ssid": "ASUS_A8",
+    "ip": "192.168.50.1",
+    "is_qis_support_isp": true,
+    "is_qis_support_default_password": true,
+    "local_password": "asus#12345",
+    "local_username": "admin",
+    "model_name": "RT-AX5400",
+    "wifi_password": "asus#12345",
+    "wifi_ssid": "#AppAutoTest_RT-AX5400"
+}

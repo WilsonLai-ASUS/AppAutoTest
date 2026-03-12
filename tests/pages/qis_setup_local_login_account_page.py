@@ -4,10 +4,20 @@ from tests.test_base import TestBase
 from common import Element, logger, ResultCode, Utils, app, dut
 
 
+def get_page_title_label() -> Element:
+    return Element(
+        ios_name="Set up Local Login Account",
+        android_id="com.asus.aihome:id/main_title",
+        android_xpath='//android.widget.TextView[@resource-id="com.asus.aihome:id/main_title"]',
+    )
+
+
 def get_use_default_local_login_password_button() -> Element:
     return Element(
         ios_class_chain='**/XCUIElementTypeStaticText[`name == "Use default Local Login Password"`][2]',
         ios_xpath='(//XCUIElementTypeStaticText[@name="Use default Local Login Password"])[2]',
+        android_id="com.asus.aihome:id/checkbox",
+        android_xpath='//android.widget.CheckBox[@resource-id="com.asus.aihome:id/checkbox"]',
     )
 
 
@@ -51,6 +61,15 @@ def get_next_button() -> Element:
         android_id="com.asus.aihome:id/next_btn",
         android_xpath='//android.widget.Button[@resource-id="com.asus.aihome:id/next_btn"]',
     )
+
+
+def is_page_displayed() -> bool:
+    page_title_label = get_page_title_label()
+
+    if app.is_ios():
+        return page_title_label.is_exist()
+    else:
+        return page_title_label.text_equals("Set up Local Login Account")
 
 
 def tap_use_default_local_login_password_button(test: TestBase):
@@ -182,26 +201,16 @@ def tap_next_button(test: TestBase):
     # find next button
     next_button = get_next_button()
 
-    try:
-        test.check(
-            next_button.is_exist(),
-            ResultCode.ELEMENT_NOT_FOUND,
-            "Next button not found",
-        )
+    test.check(
+        next_button.is_exist(),
+        ResultCode.ELEMENT_NOT_FOUND,
+        "Next button not found",
+    )
 
-        test.check(
-            next_button.tap(),
-            ResultCode.ELEMENT_NOT_TAPPABLE,
-            "Next button not tappable",
-        )
-
-    except Exception as e:
-        if app.is_ios():
-            # iOS keyboard shrinking event seems to automatically go to the next page
-            logger.warn(
-                f"Tap Next button failed, maybe it's already on the next page: {e}"
-            )
-        else:
-            raise e
+    test.check(
+        next_button.tap(),
+        ResultCode.ELEMENT_NOT_TAPPABLE,
+        "Next button not tappable",
+    )
 
     logger.info("Tapped 'Next' button")

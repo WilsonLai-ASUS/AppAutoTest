@@ -298,6 +298,16 @@ class Element:
         except Exception as e:
             return False
 
+    def clear_text(self) -> bool:
+        if not self.is_exist():
+            return False
+
+        try:
+            self.web_element.clear()
+            return True
+        except Exception as e:
+            return False
+
     def type(self) -> str:
         if app.is_ios():
             return self._ios_type()
@@ -308,6 +318,9 @@ class Element:
 
     def rect_by_key(self, rect_name: str) -> int:
         return self.rect().get(rect_name, 0)
+
+    def text_equals(self, text: str) -> bool:
+        return self.text() == text
 
     # custom attributes - text
     def text(self) -> str:
